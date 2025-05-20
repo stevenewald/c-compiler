@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  NAME: c-compiler
+  RELEASE_BUILD: "False"
+  WEB_BUILD: "False"
+  RELEASE_PRESET: "ci-ubuntu"
+
+tasks:
+  deps:
+    dir: .
+    cmds:
+      - conan install . -pr default -s build_type=Debug -b missing
+      - conan install . -pr default -s build_type=Release -b missing
+
+  init:
+    dir: .
+    preconditions:
+      - test -f CMakeUserPresets.json
+    cmds:
+      - cmake --preset=dev
+      - cmake --preset={{.RELEASE_PRESET}}
+
+
+  build:
+    dir: .
+    vars:
+      CMAKE_SUFFIX: '{{if eq .RELEASE_BUILD "True"}}build --config Release{{else}}--preset=dev{{end}}'
+    preconditions:
+      - test -f CMakeUserPresets.json
+    cmds:
+      - cmake --build {{.CMAKE_SUFFIX}} -j
+
+  test:
+    dir: '{{if eq .RELEASE_BUILD "true"}}./build{{else}}.{{end}}'
+    vars:
+      DEV_TEST_FLAGS: '--preset=dev --timeout 1'
+      RELEASE_TEST_FLAGS: '--output-on-failure --no-tests=error -C Release --timeout 2'
+      TEST_FLAGS: '{{if eq .RELEASE_BUILD "true"}}{{.RELEASE_TEST_FLAGS}}{{else}}{{.DEV_TEST_FLAGS}}{{end}}'
+    cmds:
+      - task: build
+      - ctest {{.TEST_FLAGS}}
+
+  fmt:
+    dir: .
+    cmds:
+      - cmake -D FIX=YES -P cmake/lint.cmake
